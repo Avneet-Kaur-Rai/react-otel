@@ -1,0 +1,114 @@
+# Docker Compose for OpenTelemetry Demo
+# 
+# This sets up:
+# - Jaeger (all-in-one): Trace collection and visualization
+# 
+# For Session Demo: Easy one-command setup
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # Jaeger - Distributed Tracing Backend
+  # ==========================================================================
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger-otel
+    restart: unless-stopped
+    
+    ports:
+      # Jaeger UI - Web interface for viewing traces
+      - "16686:16686"
+      
+      # OTLP HTTP receiver - Where our React app sends traces
+      - "4318:4318"
+      
+      # OTLP gRPC receiver (alternative protocol)
+      - "4317:4317"
+      
+      # Jaeger collector (legacy protocols)
+      - "14250:14250"  # gRPC
+      - "14268:14268"  # HTTP
+      
+      # Zipkin compatible endpoint
+      - "9411:9411"
+    
+    environment:
+      # Enable OTLP receiver
+      - COLLECTOR_OTLP_ENABLED=true
+      
+      # Enable CORS for browser requests
+      - COLLECTOR_OTLP_HTTP_CORS_ALLOWED_ORIGINS=*
+      
+      # Logging level
+      - LOG_LEVEL=info
+      
+      # Memory storage (for demo - use Cassandra/Elasticsearch in production)
+      - SPAN_STORAGE_TYPE=memory
+      
+      # UI customization
+      - QUERY_BASE_PATH=/
+    
+    networks:
+      - otel-network
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:16686"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  otel-network:
+    driver: bridge
+
+# ==========================================================================
+# Usage Instructions (For Session Demo)
+# ==========================================================================
+# 
+# 1. Start services:
+#    docker-compose up -d
+# 
+# 2. Access Jaeger UI:
+#    http://localhost:16686
+# 
+# 3. Your React app will send traces to:
+#    http://localhost:4318/v1/traces
+# 
+# 4. Stop services:
+#    docker-compose down
+# 
+# 5. View logs:
+#    docker-compose logs -f jaeger
+# 
+# ==========================================================================
+# Session Demo Flow
+# ==========================================================================
+# 
+# 1. Start this docker-compose
+# 2. Run: npm install
+# 3. Run: npm run dev
+# 4. Use your React app (add to cart, checkout, etc.)
+# 5. Open Jaeger UI and search for "shophub-ecommerce-frontend"
+# 6. Show traces, spans, attributes, events
+# 7. Demonstrate debugging a slow operation
+# 
+# ==========================================================================
+# Production Considerations
+# ==========================================================================
+# 
+# For production, consider:
+# - Use persistent storage (Elasticsearch, Cassandra)
+# - Add authentication/authorization
+# - Use separate collector and query services
+# - Add sampling strategies
+# - Set up data retention policies
+# - Enable TLS/SSL
+# - Add resource limits
+# 
+# Example production setup:
+# https://www.jaegertracing.io/docs/latest/deployment/
+# 
+# ==========================================================================

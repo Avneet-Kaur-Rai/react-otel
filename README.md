@@ -1,53 +1,210 @@
-# UI Fix Demo - E-commerce Website
+# ShopHub E-commerce with OpenTelemetry
 
-A comprehensive React-based e-commerce application built for demonstrating automated UI fixes. This project contains intentionally injected bugs to showcase automated bug detection and resolution capabilities.
+> **Complete Observability Demo: React E-commerce Application with OpenTelemetry Instrumentation**
 
-## 🚀 Features
+A production-ready React e-commerce application fully instrumented with OpenTelemetry for distributed tracing, demonstrating:
+- ✅ Frontend observability (React + Vite)
+- ✅ Auto-instrumentation (HTTP, user interactions, page loads)
+- ✅ Custom business logic tracing
+- ✅ Real-time visualization with Jaeger
+- ✅ Production-ready patterns and best practices
 
-- **User Authentication**: Login and signup functionality with form validation
-- **Image Carousel**: Auto-playing carousel on the login page
-- **Product Listing Page (PLP)**: Browse products with filtering, search, and sorting
-- **Product Detail Page (PDP)**: Detailed product information with cart integration
-- **Shopping Cart**: Add, update, and remove items with real-time calculations
-- **Checkout Flow**: Multi-step checkout process with validation
-- **Payment Processing**: Multiple payment method support (Credit/Debit/PayPal/COD)
-- **Order Summary**: Comprehensive order confirmation page
+Perfect for **technical sessions**, **learning OpenTelemetry**, and **production implementation**.
+
+---
+
+## 🎯 What This Demonstrates
+
+### For Developers
+- **Debug 10x faster** - See complete request journeys in seconds
+- **Identify bottlenecks** - Visual timeline shows slow operations
+- **Trace user flows** - Follow users through your app
+- **Error tracking** - Full context when things break
+
+### For Business
+- **Improve conversion** - Identify checkout friction points
+- **Reduce downtime** - Find issues before customers complain
+- **Optimize performance** - Data-driven improvements
+- **Better UX** - Understand user behavior
+
+---
+
+## 🚀 Quick Start (5 Minutes)
+
+### Prerequisites
+- Node.js 18+ installed
+- Docker Desktop running
+- Git installed
+
+### 1. Clone and Install
+
+```bash
+git clone <your-repo-url>
+cd react-otel
+npm install
+```
+
+### 2. Start Jaeger (Trace Visualization)
+
+```bash
+docker-compose up -d
+```
+
+Verify Jaeger is running: http://localhost:16686
+
+### 3. Start the App
+
+```bash
+npm run dev
+```
+
+App running at: http://localhost:5173
+
+### 4. Use the App & Watch Traces!
+
+1. Navigate through the app (browse products, add to cart, checkout)
+2. Open Jaeger UI: http://localhost:16686
+3. Select service: `shophub-ecommerce-frontend`
+4. Click "Find Traces"
+5. **See your traces! 🎉**
+
+---
+
+## 📊 Features
+
+### E-Commerce Functionality
+- **User Authentication**: Login/signup with validation
+- **Product Catalog**: Browse, search, filter products
+- **Shopping Cart**: Add/remove items, update quantities
+- **Checkout Flow**: Multi-step checkout with validation
+- **Payment Processing**: Multiple payment methods
+- **Order Summary**: Complete order confirmation
+
+### OpenTelemetry Instrumentation
+
+#### ✅ Auto-Instrumentation (Zero Code Changes)
+- **HTTP Requests** - Every fetch() call traced
+- **User Interactions** - Clicks, form submits tracked
+- **Page Loads** - Navigation and performance metrics
+- **Resource Loading** - Images, CSS, JS timing
+
+#### ✅ Custom Instrumentation (Business Logic)
+- **Cart Operations** - Add/remove items with product details
+- **Authentication** - Login/logout with user context
+- **Checkout Flow** - Validation, submission, conversion tracking
+- **Page Views** - Time on page, abandonment tracking
+- **Business Metrics** - Cart value, conversion rates, error rates
+
+---
 
 ## 🛠️ Tech Stack
 
-- **React 18** - UI library
-- **Vite** - Build tool and dev server
-- **React Router DOM** - Client-side routing
-- **Context API** - State management (Auth & Cart)
-- **Custom Hooks** - Reusable logic (useCarousel, useForm)
-- **CSS Modules** - Component styling
+### Frontend
+- **React 19** - UI library
+- **Vite** - Build tool
+- **React Router** - Navigation
+
+### Observability
+- **OpenTelemetry SDK** - Instrumentation
+- **Jaeger** - Trace visualization
+- **OTLP** - Data export protocol
+
+### State Management
+- **Context API** - Auth & Cart state
+- **Custom Hooks** - Reusable logic
+
+---
 
 ## 📁 Project Structure
 
 ```
-ui-fix-demo/
+react-otel/
 ├── src/
+│   ├── telemetry/              # 🆕 OpenTelemetry Setup
+│   │   └── telemetry.js       # OTel initialization & config
 │   ├── components/
-│   │   ├── common/          # Reusable UI components
-│   │   │   ├── Button/
-│   │   │   ├── Carousel/
-│   │   │   └── Input/
-│   │   ├── features/        # Feature-specific components
-│   │   │   └── ProductCard/
-│   │   └── layout/          # Layout components
-│   │       └── Header/
-│   ├── pages/               # Page components
-│   │   ├── LoginPage/
-│   │   ├── ProductListingPage/
+│   │   ├── common/            # Reusable UI components
+│   │   ├── features/          # Feature-specific components
+│   │   └── layout/            # Layout components
+│   ├── pages/                 # Page components (instrumented)
 │   │   ├── ProductDetailPage/
-│   │   ├── CartPage/
 │   │   ├── CheckoutPage/
-│   │   ├── PaymentPage/
-│   │   └── OrderSummaryPage/
-│   ├── context/             # React Context providers
-│   │   ├── AuthContext.jsx
-│   │   └── CartContext.jsx
-│   ├── hooks/               # Custom React hooks
+│   │   └── ...
+│   ├── context/               # 🆕 Instrumented Contexts
+│   │   ├── AuthContext.jsx    # Login/logout tracing
+│   │   └── CartContext.jsx    # Cart operations tracing
+│   ├── hooks/                 # Custom React hooks
+│   ├── constants/             # App constants
+│   ├── utils/                 # Utility functions
+│   └── main.jsx              # 🆕 OTel init before React
+├── docker-compose.yml        # 🆕 Jaeger setup
+├── OPENTELEMETRY.md          # 🆕 Complete OTel guide
+├── SESSION_DEMO.md           # 🆕 Presentation demo script
+├── SLIDES_OUTLINE.md         # 🆕 Presentation slides
+├── BACKEND_EXAMPLE.md        # 🆕 Node.js backend example
+└── README.md                 # This file
+```
+
+---
+
+## 🎓 For Technical Sessions
+
+This project is **ready for presentations**! We've included everything you need:
+
+### 📚 Documentation
+1. **OPENTELEMETRY.md** - Complete guide to OpenTelemetry
+   - What is OTel?
+   - Core concepts (Traces, Spans, Collector)
+   - Architecture diagrams
+   - Real-world use cases
+   - Best practices
+
+2. **SESSION_DEMO.md** - Step-by-step demo script
+   - Pre-session checklist
+   - 60-minute presentation flow
+   - Live demo walkthrough
+   - Talking points
+   - Q&A preparation
+   - Troubleshooting guide
+
+3. **SLIDES_OUTLINE.md** - Complete presentation structure
+   - 40 slide deck outline
+   - Speaker notes
+   - Design tips
+   - Visual guidelines
+
+4. **BACKEND_EXAMPLE.md** - Optional Node.js backend
+   - Distributed tracing across services
+   - Database query tracing
+   - Error propagation
+
+### 🎬 Demo Flow (25 minutes)
+
+1. **Code Walkthrough** (5 min)
+   - Show telemetry initialization
+   - Explain auto-instrumentation
+   - Demonstrate custom spans
+
+2. **Live User Journey** (10 min)
+   - Browse products → traces in Jaeger
+   - Add to cart → see business attributes
+   - Checkout flow → multi-span traces
+
+3. **Debugging Scenario** (5 min)
+   - Search for slow operations
+   - Identify bottlenecks
+   - Show error tracking
+
+4. **Advanced Features** (5 min)
+   - Search/filter capabilities
+   - Business metrics tracking
+   - Production considerations
+
+---
+
+## 💻 Development
+
+### Install Dependencies
 │   │   ├── useCarousel.js
 │   │   └── useForm.js
 │   ├── utils/               # Utility functions

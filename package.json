@@ -1,5 +1,5 @@
 {
-  "name": "ui-fix-demo",
+  "name": "react-otel",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,6 +10,18 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-web": "^1.28.0",
+    "@opentelemetry/instrumentation": "^0.56.0",
+    "@opentelemetry/instrumentation-document-load": "^0.42.0",
+    "@opentelemetry/instrumentation-user-interaction": "^0.42.0",
+    "@opentelemetry/instrumentation-fetch": "^0.56.0",
+    "@opentelemetry/instrumentation-xml-http-request": "^0.56.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.56.0",
+    "@opentelemetry/resources": "^1.28.0",
+    "@opentelemetry/semantic-conventions": "^1.28.0",
+    "@opentelemetry/sdk-trace-base": "^1.28.0",
+    "@opentelemetry/context-zone": "^1.28.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.6"
