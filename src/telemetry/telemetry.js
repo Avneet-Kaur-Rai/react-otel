@@ -20,7 +20,7 @@ import { UserInteractionInstrumentation } from '@opentelemetry/instrumentation-u
 import { FetchInstrumentation } from '@opentelemetry/instrumentation-fetch';
 import { XMLHttpRequestInstrumentation } from '@opentelemetry/instrumentation-xml-http-request';
 import { ZoneContextManager } from '@opentelemetry/context-zone';
-import { trace, context } from '@opentelemetry/api';
+import { trace, context, metrics } from '@opentelemetry/api';
 
 // ============================================================================
 // CONFIGURATION
@@ -34,8 +34,8 @@ const OTEL_CONFIG = {
   // Jaeger endpoint - use window.location.origin for relative proxy path
   collectorEndpoint: `${window.location.origin}/v1/traces`,
   
-  // Enable console exporter for debugging
-  enableConsoleExporter: true,
+  // Enable console exporter for debugging (set to false for cleaner console)
+  enableConsoleExporter: false,  // Set to true to see raw span objects in console
 };
 
 // ============================================================================
@@ -257,7 +257,158 @@ console.log('🔧 Auto-instrumentations registered:', [
 ]);
 
 // ============================================================================
-// STEP 7: Export Tracer for Custom Instrumentation
+// STEP 7: Setup Metrics (For Business KPIs)
+// ============================================================================
+
+/**
+ * Metrics API - Track numerical values over time
+ * 
+ * For Session Demo: Show how to track business metrics
+ * - Counters (always increasing)
+ * - Histograms (distributions)
+ */
+
+const meter = metrics.getMeter('shophub-business-metrics', '1.0.0');
+
+// Business Metrics
+export const businessMetrics = {
+  // Revenue tracking
+  revenue: meter.createCounter('business.revenue', {
+    description: 'Total revenue in USD',
+    unit: 'USD'
+  }),
+  
+  // Cart operations
+  cartAdditions: meter.createCounter('business.cart.additions', {
+    description: 'Number of items added to cart'
+  }),
+  
+  cartRemovals: meter.createCounter('business.cart.removals', {
+    description: 'Number of items removed from cart'
+  }),
+  
+  cartAbandonment: meter.createCounter('business.cart.abandoned', {
+    description: 'Number of abandoned carts'
+  }),
+  
+  // User authentication
+  loginAttempts: meter.createCounter('business.auth.login_attempts', {
+    description: 'Number of login attempts'
+  }),
+  
+  loginSuccesses: meter.createCounter('business.auth.login_success', {
+    description: 'Number of successful logins'
+  }),
+  
+  loginFailures: meter.createCounter('business.auth.login_failures', {
+    description: 'Number of failed logins'
+  }),
+  
+  // Checkout flow
+  checkoutStarted: meter.createCounter('business.checkout.started', {
+    description: 'Number of checkouts started'
+  }),
+  
+  checkoutCompleted: meter.createCounter('business.checkout.completed', {
+    description: 'Number of checkouts completed'
+  }),
+  
+  checkoutDuration: meter.createHistogram('business.checkout.duration', {
+    description: 'Time to complete checkout',
+    unit: 'ms'
+  }),
+  
+  // Product interactions
+  productViews: meter.createCounter('business.product.views', {
+    description: 'Number of product views'
+  }),
+  
+  productSearches: meter.createCounter('business.product.searches', {
+    description: 'Number of product searches'
+  }),
+};
+
+console.log('📊 Business metrics initialized (11 metrics ready)');
+
+// ============================================================================
+// STEP 8: Setup Structured Logging with Trace Correlation
+// ============================================================================
+
+/**
+ * Structured Logger - Logs with trace correlation
+ * 
+ * For Session Demo: Show how logs connect to traces
+ * Each log automatically includes:
+ * - Trace ID (connect log to trace)
+ * - Span ID (connect log to specific operation)
+ * - Timestamp
+ * - Severity level
+ */
+
+export const logger = {
+  debug: (message, attributes = {}) => {
+    logWithTraceContext('DEBUG', message, attributes);
+  },
+  
+  info: (message, attributes = {}) => {
+    logWithTraceContext('INFO', message, attributes);
+  },
+  
+  warn: (message, attributes = {}) => {
+    logWithTraceContext('WARN', message, attributes);
+  },
+  
+  error: (message, attributes = {}) => {
+    logWithTraceContext('ERROR', message, attributes);
+  },
+};
+
+function logWithTraceContext(severity, message, attributes) {
+  const span = trace.getActiveSpan();
+  const spanContext = span?.spanContext();
+  
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    severity,
+    message,
+    ...attributes,
+  };
+  
+  // Add trace context if available
+  if (spanContext) {
+    logEntry.traceId = spanContext.traceId;
+    logEntry.spanId = spanContext.spanId;
+    logEntry.traceFlags = spanContext.traceFlags;
+  }
+  
+  // Log to console with formatting
+  const emoji = {
+    DEBUG: '🔍',
+    INFO: 'ℹ️',
+    WARN: '⚠️',
+    ERROR: '❌'
+  }[severity];
+  
+  const style = {
+    DEBUG: 'color: gray',
+    INFO: 'color: blue',
+    WARN: 'color: orange',
+    ERROR: 'color: red; font-weight: bold'
+  }[severity];
+  
+  console.log(
+    `%c${emoji} [${severity}] ${message}`,
+    style,
+    spanContext ? `\n🔗 Trace: ${spanContext.traceId}` : '',
+    Object.keys(attributes).length > 0 ? `\n📋 Attributes:` : '',
+    Object.keys(attributes).length > 0 ? attributes : ''
+  );
+}
+
+console.log('📝 Structured logging initialized with trace correlation');
+
+// ============================================================================
+// STEP 9: Export Tracer for Custom Instrumentation
 // ============================================================================
 
 /**

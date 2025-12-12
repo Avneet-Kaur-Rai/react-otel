@@ -14,7 +14,7 @@ import { ROUTES } from '../../constants/routes';
 import { validateEmail, validatePhone, validateZipCode } from '../../utils/validators';
 import Input from '../../components/common/Input/Input';
 import Button from '../../components/common/Button/Button';
-import { tracer, recordBusinessMetric } from '../../telemetry/telemetry';
+import { tracer, businessMetrics, logger } from '../../telemetry/telemetry';
 import { SpanStatusCode } from '@opentelemetry/api';
 import './CheckoutPage.css';
 
@@ -37,6 +37,7 @@ const CheckoutPage = () => {
   // Track Page View and Time on Page
   // ============================================================================
   useEffect(() => {
+    const pageLoadStart = performance.now();
     const span = tracer.startSpan('page.view.checkout');
     
     span.setAttribute('page.name', 'CheckoutPage');
@@ -44,24 +45,44 @@ const CheckoutPage = () => {
     span.setAttribute('checkout.step', 'information');
     
     span.addEvent('checkout_page_loaded');
-    recordBusinessMetric('page.checkout_view', 1);
+    
+    // Track checkout started metric
+    businessMetrics.checkoutStarted.add(1, {
+      'checkout.step': 'information'
+    });
+    
+    // Log page view
+    logger.info('Checkout page viewed', {
+      'page.name': 'CheckoutPage',
+      'checkout.step': 'information'
+    });
     
     span.end();
     
-    console.log('📝 [OTel] Checkout page viewed');
-    
-    // Track abandonment
+    // Track abandonment on unmount
     const startTime = Date.now();
     return () => {
       const timeSpent = Date.now() - startTime;
+      const pageLoadTime = performance.now() - pageLoadStart;
+      
       const exitSpan = tracer.startSpan('page.exit.checkout');
       exitSpan.setAttribute('page.timeSpent_ms', timeSpent);
-      exitSpan.setAttribute('form.completed', false); // Will be true if they submit
+      exitSpan.setAttribute('page.loadTime_ms', pageLoadTime);
+      exitSpan.setAttribute('form.completed', false);
       exitSpan.addEvent('checkout_abandoned');
-      recordBusinessMetric('checkout.abandonment', 1);
-      exitSpan.end();
       
-      console.log(`⚠️ [OTel] Checkout abandoned after ${timeSpent}ms`);
+      // Track abandonment
+      businessMetrics.cartAbandonment.add(1, {
+        'checkout.step': 'information',
+        'time.spent_ms': timeSpent.toString()
+      });
+      
+      logger.warn('Checkout abandoned', {
+        'time.spent_ms': timeSpent,
+        'checkout.step': 'information'
+      });
+      
+      exitSpan.end();
     };
   }, []);
 
@@ -138,16 +159,17 @@ const CheckoutPage = () => {
             'error.fields': validationResults.join(', '),
           });
           
-          // Track each error type
-          validationResults.forEach(error => {
-            recordBusinessMetric(`checkout.validation_error.${error}`, 1);
+          // Log validation errors
+          logger.warn('Checkout validation failed', {
+            'error.count': errorCount,
+            'error.fields': validationResults.join(', ')
           });
-          
-          console.warn(`⚠️ [OTel] Validation failed: ${errorCount} errors`);
         } else {
           span.addEvent('validation_passed');
-          recordBusinessMetric('checkout.validation_success', 1);
-          console.log('✅ [OTel] Validation passed');
+          
+          logger.info('Checkout validation passed', {
+            'form.fields': Object.keys(formData).length
+          });
         }
         
         span.setStatus({ code: SpanStatusCode.OK });
@@ -187,14 +209,22 @@ const CheckoutPage = () => {
           span.setAttribute('submission.result', 'validation_failed');
           span.addEvent('submission_blocked_by_validation');
           
-          recordBusinessMetric('checkout.submit_failed', 1);
+          // Track failed checkout
+          businessMetrics.checkoutCompleted.add(0, {
+            'result': 'validation_failed',
+            'error.count': Object.keys(newErrors).length.toString()
+          });
           
           span.setStatus({ 
             code: SpanStatusCode.ERROR,
             message: 'Validation failed' 
           });
           
-          console.error('❌ [OTel] Checkout submission failed: validation errors');
+          logger.error('Checkout submission failed - validation errors', {
+            'error.count': Object.keys(newErrors).length,
+            'submission.result': 'validation_failed'
+          });
+          
           return;
         }
 
@@ -202,17 +232,32 @@ const CheckoutPage = () => {
         sessionStorage.setItem('checkoutData', JSON.stringify(formData));
         span.addEvent('checkout_data_saved');
         
+        // Track successful checkout timing
+        const checkoutDuration = performance.now();
+        businessMetrics.checkoutDuration.record(checkoutDuration, {
+          'checkout.step': 'information',
+          'result': 'success'
+        });
+        
         // Navigate to payment
         span.setAttribute('submission.result', 'success');
         span.setAttribute('navigation.target', ROUTES.PAYMENT);
+        span.setAttribute('checkout.duration_ms', checkoutDuration);
         span.addEvent('navigating_to_payment');
         
-        recordBusinessMetric('checkout.submit_success', 1);
-        recordBusinessMetric('conversion.reached_payment', 1);
+        // Track completed checkout
+        businessMetrics.checkoutCompleted.add(1, {
+          'checkout.step': 'information',
+          'navigation.target': 'payment'
+        });
         
         span.setStatus({ code: SpanStatusCode.OK });
         
-        console.log('✅ [OTel] Checkout submitted successfully');
+        logger.info('Checkout submitted successfully', {
+          'navigation.target': 'payment',
+          'checkout.duration_ms': checkoutDuration,
+          'form.fields_count': Object.keys(formData).length
+        });
         
         navigate(ROUTES.PAYMENT);
         
@@ -220,9 +265,12 @@ const CheckoutPage = () => {
         span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
         span.recordException(error);
         
-        recordBusinessMetric('checkout.submit_error', 1);
+        // Log error
+        logger.error('Checkout submission error', {
+          'error.message': error.message,
+          'error.type': error.name
+        });
         
-        console.error('❌ [OTel] Checkout submission error:', error);
         throw error;
         
       } finally {
