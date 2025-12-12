@@ -8,7 +8,7 @@
  */
 
 import { createContext, useContext, useState } from 'react';
-import { tracer, setUserContext, recordBusinessMetric } from '../telemetry/telemetry';
+import { tracer, setUserContext, businessMetrics, logger } from '../telemetry/telemetry';
 import { SpanStatusCode } from '@opentelemetry/api';
 
 const AuthContext = createContext();
@@ -74,17 +74,32 @@ export const AuthProvider = ({ children }) => {
         span.addEvent('user_context_set');
         
         // ====================================================================
-        // Record business events
+        // Record business events and metrics
         // ====================================================================
         span.addEvent('login_successful', {
           'user.name': username,
           'session.started': new Date().toISOString(),
         });
         
-        recordBusinessMetric('auth.login_success', 1);
-        span.setStatus({ code: SpanStatusCode.OK });
+        // Track login metrics
+        businessMetrics.loginAttempts.add(1, {
+          'auth.method': 'email_password',
+          'auth.provider': 'local'
+        });
         
-        console.log(`✅ [OTel] User logged in: ${email}`);
+        businessMetrics.loginSuccesses.add(1, {
+          'auth.method': 'email_password',
+          'user.email': email
+        });
+        
+        // Log successful login with trace context
+        logger.info(`User logged in successfully`, {
+          'user.email': email,
+          'user.name': username,
+          'auth.duration_ms': duration
+        });
+        
+        span.setStatus({ code: SpanStatusCode.OK });
         
         return true;
         
@@ -102,7 +117,23 @@ export const AuthProvider = ({ children }) => {
           'error.message': error.message,
         });
         
-        recordBusinessMetric('auth.login_failure', 1);
+        // Track failed login metric
+        businessMetrics.loginAttempts.add(1, {
+          'auth.method': 'email_password',
+          'auth.provider': 'local'
+        });
+        
+        businessMetrics.loginFailures.add(1, {
+          'auth.method': 'email_password',
+          'error.type': error.name
+        });
+        
+        // Log error with trace context
+        logger.error('Login failed', {
+          'error.type': error.name,
+          'error.message': error.message,
+          'user.email': email
+        });
         
         console.error('❌ [OTel] Login failed:', error);
         return false;
@@ -131,15 +162,20 @@ export const AuthProvider = ({ children }) => {
           'session.ended': new Date().toISOString(),
         });
         
-        recordBusinessMetric('auth.logout', 1);
-        span.setStatus({ code: SpanStatusCode.OK });
+        // Log logout
+        logger.info('User logged out', {
+          'user.email': user?.email || 'unknown'
+        });
         
-        console.log('👋 [OTel] User logged out');
+        span.setStatus({ code: SpanStatusCode.OK });
         
       } catch (error) {
         span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
         span.recordException(error);
-        console.error('❌ [OTel] Logout failed:', error);
+        
+        logger.error('Logout failed', {
+          'error.message': error.message
+        });
         throw error;
       } finally {
         span.end();
@@ -187,10 +223,13 @@ export const AuthProvider = ({ children }) => {
           'account.created': new Date().toISOString(),
         });
         
-        recordBusinessMetric('auth.signup_success', 1);
-        span.setStatus({ code: SpanStatusCode.OK });
+        // Log signup
+        logger.info('New user signed up', {
+          'user.email': email,
+          'user.name': name
+        });
         
-        console.log(`🎉 [OTel] New user signed up: ${email}`);
+        span.setStatus({ code: SpanStatusCode.OK });
         
         return true;
         
@@ -204,9 +243,13 @@ export const AuthProvider = ({ children }) => {
           'error.type': error.name,
         });
         
-        recordBusinessMetric('auth.signup_failure', 1);
+        // Log signup failure
+        logger.error('Signup failed', {
+          'error.type': error.name,
+          'error.message': error.message,
+          'user.email': email
+        });
         
-        console.error('❌ [OTel] Signup failed:', error);
         return false;
         
       } finally {

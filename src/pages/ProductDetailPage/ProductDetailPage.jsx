@@ -14,7 +14,7 @@ import { ROUTES } from '../../constants/routes';
 import { useCart } from '../../context/CartContext';
 import { formatCurrency } from '../../utils/formatters';
 import Button from '../../components/common/Button/Button';
-import { tracer, recordBusinessMetric } from '../../telemetry/telemetry';
+import { tracer, businessMetrics, logger } from '../../telemetry/telemetry';
 import { SpanStatusCode } from '@opentelemetry/api';
 import './ProductDetailPage.css';
 
@@ -48,12 +48,20 @@ const ProductDetailPage = () => {
         'product.name': product.name,
       });
       
-      recordBusinessMetric('page.product_view', 1);
-      recordBusinessMetric('product.views', 1);
+      // Track product view metric
+      businessMetrics.productViews.add(1, {
+        'product.id': product.id.toString(),
+        'product.category': product.category
+      });
+      
+      // Log product view
+      logger.info('Product viewed', {
+        'product.id': product.id,
+        'product.name': product.name,
+        'product.price': product.price
+      });
       
       span.setStatus({ code: SpanStatusCode.OK });
-      
-      console.log(`👁️ [OTel] Product viewed: ${product.name}`);
     } else {
       // Product not found - track error
       span.setAttribute('error', true);
@@ -61,14 +69,15 @@ const ProductDetailPage = () => {
         'product.id': id,
       });
       
-      recordBusinessMetric('page.product_not_found', 1);
+      // Log not found
+      logger.warn('Product not found', {
+        'product.id': id
+      });
       
       span.setStatus({ 
         code: SpanStatusCode.ERROR,
         message: 'Product not found' 
       });
-      
-      console.warn(`⚠️ [OTel] Product not found: ${id}`);
     }
     
     span.end();
@@ -122,15 +131,22 @@ const ProductDetailPage = () => {
         span.addEvent('add_to_cart_successful');
         alert('Product added to cart!');
         
-        recordBusinessMetric('user.add_to_cart', 1);
-        span.setStatus({ code: SpanStatusCode.OK });
+        // Log user action
+        logger.info('Add to cart from product detail', {
+          'product.id': product.id,
+          'product.name': product.name
+        });
         
-        console.log(`🛒 [OTel] Add to cart action: ${product.name}`);
+        span.setStatus({ code: SpanStatusCode.OK });
         
       } catch (error) {
         span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
         span.recordException(error);
-        console.error('❌ [OTel] Add to cart failed:', error);
+        
+        logger.error('Add to cart failed', {
+          'error.message': error.message,
+          'product.id': product.id
+        });
       } finally {
         span.end();
       }
@@ -161,17 +177,28 @@ const ProductDetailPage = () => {
         span.addEvent('navigating_to_cart');
         navigate(ROUTES.CART);
         
-        recordBusinessMetric('user.buy_now', 1);
-        recordBusinessMetric('conversion.quick_checkout', 1);
+        // Track quick checkout
+        businessMetrics.checkoutStarted.add(1, {
+          'source': 'buy_now_button',
+          'product.id': product.id.toString()
+        });
+        
+        // Log buy now action
+        logger.info('Buy now clicked', {
+          'product.id': product.id,
+          'product.name': product.name
+        });
         
         span.setStatus({ code: SpanStatusCode.OK });
-        
-        console.log(`💳 [OTel] Buy now action: ${product.name}`);
         
       } catch (error) {
         span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
         span.recordException(error);
-        console.error('❌ [OTel] Buy now failed:', error);
+        
+        logger.error('Buy now failed', {
+          'error.message': error.message,
+          'product.id': product.id
+        });
       } finally {
         span.end();
       }

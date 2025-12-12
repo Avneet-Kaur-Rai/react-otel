@@ -10,7 +10,7 @@
  */
 
 import { createContext, useContext, useState } from 'react';
-import { tracer, recordBusinessMetric } from '../telemetry/telemetry';
+import { tracer, businessMetrics, logger } from '../telemetry/telemetry';
 import { SpanStatusCode } from '@opentelemetry/api';
 
 const CartContext = createContext();
@@ -81,10 +81,28 @@ export const CartProvider = ({ children }) => {
         });
         
         // ====================================================================
-        // Record business metrics
+        // Record business metrics (Session Demo: Show metrics tracking)
         // ====================================================================
-        recordBusinessMetric('cart.item_added', 1);
-        recordBusinessMetric('cart.value_added', product.price, 'USD');
+        businessMetrics.cartAdditions.add(1, {
+          'product.id': product.id.toString(),
+          'product.category': product.category || 'unknown',
+          'action': actionType
+        });
+        
+        // Track revenue potential
+        businessMetrics.revenue.add(product.price, {
+          'stage': 'cart_addition',
+          'product.category': product.category || 'unknown'
+        });
+        
+        // ====================================================================
+        // Structured logging (Session Demo: Logs with trace context)
+        // ====================================================================
+        logger.info(`Item added to cart: ${product.name}`, {
+          'product.id': product.id,
+          'product.price': product.price,
+          'cart.action': actionType
+        });
         
         // ====================================================================
         // Mark span as successful
@@ -107,7 +125,13 @@ export const CartProvider = ({ children }) => {
           'error.message': error.message,
         });
         
-        console.error('❌ [OTel] Failed to add item to cart:', error);
+        // Structured error logging
+        logger.error('Failed to add item to cart', {
+          'error.type': error.name,
+          'error.message': error.message,
+          'product.id': product.id
+        });
+        
         throw error;
         
       } finally {
@@ -141,10 +165,18 @@ export const CartProvider = ({ children }) => {
           'product.id': productId,
         });
         
-        recordBusinessMetric('cart.item_removed', 1);
-        span.setStatus({ code: SpanStatusCode.OK });
+        // Track removal metrics
+        businessMetrics.cartRemovals.add(1, {
+          'product.id': productId.toString()
+        });
         
-        console.log(`🗑️ [OTel] Item removed from cart: ${productId}`);
+        // Log the removal
+        logger.info(`Item removed from cart`, {
+          'product.id': productId,
+          'quantity.removed': itemToRemove?.quantity || 0
+        });
+        
+        span.setStatus({ code: SpanStatusCode.OK });
         
       } catch (error) {
         span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
@@ -193,15 +225,29 @@ export const CartProvider = ({ children }) => {
           'new.quantity': quantity,
         });
         
-        recordBusinessMetric('cart.quantity_updated', 1);
-        span.setStatus({ code: SpanStatusCode.OK });
+        // Track quantity update metric
+        businessMetrics.cartAdditions.add(quantity - (currentItem?.quantity || 0), {
+          'product.id': productId.toString(),
+          'action': 'quantity_update'
+        });
         
-        console.log(`🔄 [OTel] Cart quantity updated: ${productId} -> ${quantity}`);
+        // Log quantity update
+        logger.info('Cart quantity updated', {
+          'product.id': productId,
+          'new.quantity': quantity,
+          'previous.quantity': currentItem?.quantity || 0
+        });
+        
+        span.setStatus({ code: SpanStatusCode.OK });
         
       } catch (error) {
         span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
         span.recordException(error);
-        console.error('❌ [OTel] Failed to update quantity:', error);
+        
+        logger.error('Failed to update quantity', {
+          'error.message': error.message,
+          'product.id': productId
+        });
         throw error;
       } finally {
         span.end();
@@ -230,16 +276,27 @@ export const CartProvider = ({ children }) => {
           'total.value': totalValue,
         });
         
-        recordBusinessMetric('cart.cleared', 1);
-        recordBusinessMetric('cart.cleared_value', totalValue, 'USD');
-        span.setStatus({ code: SpanStatusCode.OK });
+        // Track cart clearing
+        businessMetrics.cartAbandonment.add(1, {
+          'items.count': itemCount.toString(),
+          'total.value': totalValue.toString()
+        });
         
-        console.log(`🧹 [OTel] Cart cleared: ${itemCount} items, $${totalValue.toFixed(2)}`);
+        // Log cart cleared
+        logger.info('Cart cleared', {
+          'items.removed': itemCount,
+          'total.value': totalValue
+        });
+        
+        span.setStatus({ code: SpanStatusCode.OK });
         
       } catch (error) {
         span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
         span.recordException(error);
-        console.error('❌ [OTel] Failed to clear cart:', error);
+        
+        logger.error('Failed to clear cart', {
+          'error.message': error.message
+        });
         throw error;
       } finally {
         span.end();
