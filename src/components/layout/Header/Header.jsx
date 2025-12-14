@@ -12,16 +12,16 @@ const Header = () => {
     <header className="header">
       <div className="header-container">
         <Link to={ROUTES.HOME} className="logo">
-          <span className="logo-icon">🛍️</span>
-          <span className="logo-text">ShopHub</span>
+          <span className="logo-icon">👗</span>
+          <span className="logo-text">ChicCloset</span>
         </Link>
 
         <nav className="nav">
           <Link to={ROUTES.PRODUCTS} className="nav-link">
-            Products
+            Shop
           </Link>
           <Link to={ROUTES.CART} className="nav-link cart-link">
-            🛒 Cart
+            🛍️ Bag
             {getCartCount() > 0 && (
               <span className="cart-badge">{getCartCount()}</span>
             )}
