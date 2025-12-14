@@ -27,7 +27,7 @@ import { trace, context, metrics } from '@opentelemetry/api';
 // ============================================================================
 
 const OTEL_CONFIG = {
-  serviceName: 'shophub-ecommerce-frontend',
+  serviceName: 'chiccloset-fashion-frontend',
   serviceVersion: '1.0.0',
   environment: 'development',
   
@@ -268,7 +268,7 @@ console.log('🔧 Auto-instrumentations registered:', [
  * - Histograms (distributions)
  */
 
-const meter = metrics.getMeter('shophub-business-metrics', '1.0.0');
+const meter = metrics.getMeter('chiccloset-business-metrics', '1.0.0');
 
 // Business Metrics
 export const businessMetrics = {
@@ -381,7 +381,7 @@ function logWithTraceContext(severity, message, attributes) {
     logEntry.traceFlags = spanContext.traceFlags;
   }
   
-  // Log to console with formatting
+  // Enhanced console logging with rich details
   const emoji = {
     DEBUG: '🔍',
     INFO: 'ℹ️',
@@ -389,20 +389,110 @@ function logWithTraceContext(severity, message, attributes) {
     ERROR: '❌'
   }[severity];
   
-  const style = {
-    DEBUG: 'color: gray',
-    INFO: 'color: blue',
-    WARN: 'color: orange',
-    ERROR: 'color: red; font-weight: bold'
+  const color = {
+    DEBUG: '#9E9E9E',
+    INFO: '#2196F3',
+    WARN: '#FF9800',
+    ERROR: '#F44336'
   }[severity];
   
-  console.log(
+  // Create a visually rich log output
+  console.groupCollapsed(
     `%c${emoji} [${severity}] ${message}`,
-    style,
-    spanContext ? `\n🔗 Trace: ${spanContext.traceId}` : '',
-    Object.keys(attributes).length > 0 ? `\n📋 Attributes:` : '',
-    Object.keys(attributes).length > 0 ? attributes : ''
+    `color: ${color}; font-weight: bold; font-size: 12px;`
   );
+  
+  // Timestamp
+  console.log(
+    `%c⏰ Timestamp: %c${logEntry.timestamp}`,
+    'color: #757575; font-weight: bold;',
+    'color: #424242;'
+  );
+  
+  // Trace Context
+  if (spanContext) {
+    console.group('%c🔗 Trace Context', 'color: #9C27B0; font-weight: bold;');
+    console.log(
+      `%cTrace ID: %c${spanContext.traceId}`,
+      'color: #757575;',
+      'color: #9C27B0; font-family: monospace; background: #F3E5F5; padding: 2px 6px; border-radius: 3px;'
+    );
+    console.log(
+      `%cSpan ID: %c${spanContext.spanId}`,
+      'color: #757575;',
+      'color: #7B1FA2; font-family: monospace; background: #F3E5F5; padding: 2px 6px; border-radius: 3px;'
+    );
+    console.log(
+      `%cTrace Flags: %c${spanContext.traceFlags}`,
+      'color: #757575;',
+      'color: #6A1B9A;'
+    );
+    
+    // Get span name and timing if available
+    if (span) {
+      const spanName = span.name || 'unknown';
+      console.log(
+        `%cSpan Name: %c${spanName}`,
+        'color: #757575;',
+        'color: #8E24AA; font-weight: bold;'
+      );
+      
+      // Try to get span attributes
+      try {
+        const spanAttributes = span.attributes || {};
+        if (Object.keys(spanAttributes).length > 0) {
+          console.log('%cSpan Attributes:', 'color: #AB47BC; font-weight: bold;');
+          console.table(spanAttributes);
+        }
+      } catch (e) {
+        // Span attributes might not be accessible
+      }
+    }
+    
+    console.groupEnd();
+  }
+  
+  // Custom Attributes
+  if (Object.keys(attributes).length > 0) {
+    console.group('%c📋 Custom Attributes', 'color: #FF6F00; font-weight: bold;');
+    
+    // Display attributes in a formatted way
+    Object.entries(attributes).forEach(([key, value]) => {
+      const displayValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : value;
+      console.log(
+        `%c${key}: %c${displayValue}`,
+        'color: #757575; font-weight: bold;',
+        'color: #E65100;'
+      );
+    });
+    
+    console.groupEnd();
+  }
+  
+  // Jaeger Link (if trace context available)
+  if (spanContext) {
+    const jaegerUrl = `http://localhost:16686/trace/${spanContext.traceId}`;
+    console.log(
+      `%c🔍 View in Jaeger: %c${jaegerUrl}`,
+      'color: #00897B; font-weight: bold;',
+      'color: #00695C; text-decoration: underline; cursor: pointer;'
+    );
+  }
+  
+  // Performance Hint
+  if (severity === 'WARN' || severity === 'ERROR') {
+    console.log(
+      `%c💡 Tip: Use the Trace ID to search in Jaeger UI for complete request flow`,
+      'color: #0288D1; font-style: italic; font-size: 11px;'
+    );
+  }
+  
+  console.groupEnd();
+  
+  // Also log raw object for programmatic access
+  if (OTEL_CONFIG.environment === 'development') {
+    console.debug('📦 Raw Log Entry:', logEntry);
+  }
 }
 
 console.log('📝 Structured logging initialized with trace correlation');
@@ -416,7 +506,7 @@ console.log('📝 Structured logging initialized with trace correlation');
  * Use this in your components/contexts to create custom spans
  */
 export const tracer = trace.getTracer(
-  'shophub-frontend-tracer',
+  'chiccloset-frontend-tracer',
   OTEL_CONFIG.serviceVersion
 );
 

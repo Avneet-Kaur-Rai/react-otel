@@ -11,7 +11,7 @@ const CartPage = () => {
 
     const handleCheckout = () => {
         if (cartItems.length === 0) {
-            alert('Your cart is empty!');
+            alert('Your shopping bag is empty!');
             return;
         }
         navigate(ROUTES.CHECKOUT);
@@ -27,8 +27,8 @@ const CartPage = () => {
             <div className="cart-page">
                 <div className="cart-container">
                     <div className="empty-cart">
-                        <div className="empty-cart-icon">🛒</div>
-                        <h2>Your Cart is Empty</h2>
+                        <div className="empty-cart-icon">🛍️</div>
+                        <h2>Your Shopping Bag is Empty</h2>
                         <p>Add some products to get started!</p>
                         <Button onClick={() => navigate(ROUTES.PRODUCTS)} size="large">
                             Continue Shopping
@@ -42,7 +42,7 @@ const CartPage = () => {
     return (
         <div className="cart-page">
             <div className="cart-container">
-                <h1 className="cart-title">Shopping Cart</h1>
+                <h1 className="cart-title">Shopping Bag</h1>
 
                 <div className="cart-content">
                     <div className="cart-items">

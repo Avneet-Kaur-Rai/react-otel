@@ -16,6 +16,7 @@ import Input from '../../components/common/Input/Input';
 import Button from '../../components/common/Button/Button';
 import { tracer, businessMetrics, logger } from '../../telemetry/telemetry';
 import { SpanStatusCode } from '@opentelemetry/api';
+import { isDemoActive, demoDelay, shouldSimulateError, generateErrorId, showDemoBanner } from '../../utils/demoHelpers';
 import './CheckoutPage.css';
 
 const CheckoutPage = () => {
@@ -37,6 +38,9 @@ const CheckoutPage = () => {
   // Track Page View and Time on Page
   // ============================================================================
   useEffect(() => {
+    // Show demo banner if demo mode is active
+    showDemoBanner();
+    
     const pageLoadStart = performance.now();
     const span = tracer.startSpan('page.view.checkout');
     
@@ -98,11 +102,23 @@ const CheckoutPage = () => {
    * Form Validation with Tracing
    * 
    * For Session: Show how to track validation errors
+   * DEMO SCENARIO 1: Simulate slow validation when ?demo=slow-checkout
    */
   const validate = () => {
     return tracer.startActiveSpan('checkout.validate', (span) => {
       try {
         span.setAttribute('validation.step', 'checkout_form');
+        
+        // 🎬 DEMO SCENARIO 1: Slow Checkout Validation
+        if (isDemoActive('slow-checkout')) {
+          span.setAttribute('demo.scenario', 'slow-checkout');
+          span.addEvent('simulating_slow_validation');
+          logger.warn('DEMO: Simulating 3-second validation delay', {
+            'demo.scenario': 'slow-checkout'
+          });
+          demoDelay(3000); // 3 second delay!
+          span.addEvent('slow_validation_completed');
+        }
         
         const newErrors = {};
         const validationResults = [];
@@ -231,6 +247,36 @@ const CheckoutPage = () => {
         // Store checkout data in sessionStorage
         sessionStorage.setItem('checkoutData', JSON.stringify(formData));
         span.addEvent('checkout_data_saved');
+        
+        // 🎬 DEMO SCENARIO 4: Payment Error Simulation
+        if (isDemoActive('error')) {
+          span.setAttribute('demo.scenario', 'error');
+          
+          if (shouldSimulateError(0.3)) {
+            const errorId = generateErrorId();
+            span.setAttribute('error', true);
+            span.setAttribute('error.id', errorId);
+            span.setAttribute('error.type', 'payment_processing_failed');
+            
+            logger.error('DEMO: Payment processing failed', {
+              'demo.scenario': 'error',
+              'error.id': errorId,
+              'error.code': 'PAYMENT_DECLINED',
+              'error.message': 'Card was declined by payment processor'
+            });
+            
+            alert(`❌ Payment Failed!\n\nError ID: ${errorId}\nError: Card was declined\n\n📞 Please contact support with this Error ID for assistance.`);
+            
+            span.setStatus({ 
+              code: SpanStatusCode.ERROR,
+              message: 'Payment processing failed'
+            });
+            span.end();
+            return;
+          } else {
+            logger.info('DEMO: Payment processed successfully (70% success rate)');
+          }
+        }
         
         // Track successful checkout timing
         const checkoutDuration = performance.now();
