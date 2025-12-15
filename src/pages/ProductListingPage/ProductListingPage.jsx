@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { PRODUCTS, CATEGORIES } from '../../constants/productData';
+import { CATEGORIES } from '../../constants/productData';
 import { SORT_OPTIONS } from '../../constants/enums';
 import { ROUTES } from '../../constants/routes';
 import ProductCard from '../../components/features/ProductCard/ProductCard';
@@ -12,6 +12,56 @@ const ProductListingPage = () => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [sortBy, setSortBy] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // ============================================================================
+  // FETCH PRODUCTS FROM BACKEND
+  // ============================================================================
+  useEffect(() => {
+    const fetchProducts = async () => {
+      return tracer.startActiveSpan('products.fetch', async (span) => {
+        try {
+          span.setAttribute('http.method', 'GET');
+          span.setAttribute('http.url', '/api/products');
+          
+          const response = await fetch('http://localhost:3001/api/products');
+          
+          span.setAttribute('http.status_code', response.status);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          const fetchedProducts = data.products || [];
+          
+          setProducts(fetchedProducts);
+          span.setAttribute('products.count', fetchedProducts.length);
+          span.addEvent('products_loaded', {
+            'products.count': fetchedProducts.length
+          });
+          
+          logger.info('Products fetched from backend', {
+            'products.count': fetchedProducts.length
+          });
+          
+        } catch (error) {
+          span.recordException(error);
+          logger.error('Failed to fetch products', {
+            'error.message': error.message
+          });
+          // Fallback: use empty array or show error
+          setProducts([]);
+        } finally {
+          setLoading(false);
+          span.end();
+        }
+      });
+    };
+    
+    fetchProducts();
+  }, []);
 
   // ============================================================================
   // DEMO SCENARIOS: Track page performance and experiments
@@ -24,7 +74,7 @@ const ProductListingPage = () => {
       
       span.setAttribute('page.name', 'ProductListingPage');
       span.setAttribute('page.route', '/products');
-      span.setAttribute('products.total', PRODUCTS.length);
+      span.setAttribute('products.total', products.length);
       
       // 🎬 DEMO SCENARIO 5: A/B Test Experiment
       if (isDemoActive('experiment')) {
@@ -91,16 +141,16 @@ const ProductListingPage = () => {
       } else {
         logger.info('Product listing page loaded', {
           'duration_ms': duration,
-          'products.count': PRODUCTS.length
+          'products.count': products.length
         });
       }
       
       span.end();
     });
-  }, []);
+  }, [products.length]);
 
   const filterProducts = () => {
-    let filtered = [...PRODUCTS];
+    let filtered = [...products];
 
     // Filter by category
     if (selectedCategory !== 'All') {
@@ -122,13 +172,25 @@ const ProductListingPage = () => {
     } else if (sortBy === SORT_OPTIONS.NAME_A_Z) {
       filtered.sort((a, b) => a.name.localeCompare(b.name));
     } else if (sortBy === SORT_OPTIONS.RATING) {
-      filtered.sort((a, b) => b.rating - a.rating);
+      filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     }
 
     return filtered;
   };
 
   const filteredProducts = filterProducts();
+
+  if (loading) {
+    return (
+      <div className="plp-page">
+        <div className="plp-container">
+          <div className="plp-header">
+            <h1 className="plp-title">Loading Products...</h1>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="plp-page">
