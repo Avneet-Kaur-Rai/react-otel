@@ -372,7 +372,7 @@ registerInstrumentations({
 **Say:**
 > "Let me quickly verify our setup..."
 
-**Open Terminal:**
+**Open Terminal 1:**
 ```powershell
 # Check Docker
 docker ps
@@ -385,33 +385,104 @@ abc123def456   jaegertracing/all-in-one:latest   ...   Up 5 minutes
 ```
 
 **Say:**
-> "✅ Jaeger is running."
+> "✅ Jaeger is running on port 16686 for UI and 4318 for OTLP."
 
-**Open Browser Tab 1: http://localhost:16686**
+**Open Terminal 2 (Backend):**
+```powershell
+cd backend
+npm run dev
+```
+
+**Expected output:**
+```
+🎉 OpenTelemetry SDK Started (Backend)
+Service: chiccloset-fashion-backend
+🚀 ChicCloset Backend Server Running
+URL: http://localhost:3001
+```
 
 **Say:**
-> "✅ Jaeger UI is accessible. This is where we'll visualize our traces."
+> "✅ Backend is running with OpenTelemetry auto-instrumentation."
 
-**Open Browser Tab 2: http://localhost:5173**
+**Open Terminal 3 (Frontend):**
+```powershell
+npm run dev
+```
 
 **Say:**
-> "✅ Our React app is running. Let me give you a quick tour..."
+> "✅ Frontend is running on port 5173."
+
+**Open Browser Tabs:**
+1. **Tab 1**: http://localhost:5173 (Frontend)
+2. **Tab 2**: http://localhost:16686 (Jaeger UI)
+3. **Tab 3**: Browser DevTools (F12) with Console + Network tabs
+
+**Say:**
+> "Perfect! Three services running, all instrumented. Let me show you the architecture first..."
 
 ### App Overview (3 min)
+
+**Show Architecture Diagram on Screen:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    YOUR BROWSER                             │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ React App (http://localhost:5173)                      │ │
+│  │ Service: chiccloset-fashion-frontend                   │ │
+│  │                                                         │ │
+│  │ OpenTelemetry SDK:                                     │ │
+│  │ • Auto-instrumentation: DocumentLoad, UserInteraction  │ │
+│  │ • Auto-instrumentation: Fetch, XMLHttpRequest          │ │
+│  │ • Custom spans: cart.*, auth.*, page.view.*           │ │
+│  └───────────────────────┬─────────────────────────────────┘ │
+│                          │ traceparent header               │
+└──────────────────────────┼──────────────────────────────────┘
+                           │ HTTP with context
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│          Node.js Backend (http://localhost:3001)            │
+│  Service: chiccloset-fashion-backend                        │
+│                                                             │
+│  OpenTelemetry SDK:                                         │
+│  • Auto-instrumentation: Express, HTTP                      │
+│  • Custom spans: api.*, database.*, auth.*, inventory.*    │
+│  • Span events: payment_successful, order_created          │
+└───────────────────────┬─────────────────────────────────────┘
+                        │ OTLP HTTP
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│          Jaeger (http://localhost:16686)                    │
+│  • Receives traces from both services                       │
+│  • Correlates by Trace ID                                   │
+│  • Visualizes distributed traces                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Say:**
+> "Here's how everything connects:
+> 
+> 1. **Frontend** - React app creates spans for user actions
+> 2. **HTTP Request** - When calling backend, it sends 'traceparent' header
+> 3. **Backend** - Extracts Trace ID from header, continues same trace
+> 4. **Both services** - Export to Jaeger via OTLP
+> 5. **Jaeger** - Shows complete distributed trace with SAME Trace ID
+>
+> The magic? Context propagation via standard W3C headers!"
 
 **Navigate through app:**
 
 1. **Home page**
-   > "This is our e-commerce app - ShopHub. We have products, cart, checkout, the usual stuff."
+   > "This is ChicCloset - our fashion e-commerce app. We have clothing products, cart, checkout."
 
 2. **Click Products**
-   > "Here's our product catalog."
+   > "Here's our product catalog with 16 fashion items."
 
-3. **Click on a product**
+3. **Click on 'Floral Summer Dress'**
    > "Product detail page with 'Add to Cart' and 'Buy Now' buttons."
 
 4. **Don't interact yet!**
-   > "Before I interact with it, let me show you the code that's tracing all of this..."
+   > "Before I interact, let me show you the code that makes this magic happen..."
 
 ### Code Walkthrough (5 min)
 

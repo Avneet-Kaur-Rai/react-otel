@@ -3,24 +3,75 @@ import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import Button from '../../components/common/Button/Button';
+import { tracer, logger } from '../../telemetry/telemetry';
+import { SpanStatusCode } from '@opentelemetry/api';
 import './OrderSummaryPage.css';
 
 const OrderSummaryPage = () => {
   const navigate = useNavigate();
-  const [orderData] = useState(() => {
-    const order = sessionStorage.getItem('orderData');
-    return order ? JSON.parse(order) : null;
-  });
-  const [checkoutData] = useState(() => {
-    const checkout = sessionStorage.getItem('checkoutData');
-    return checkout ? JSON.parse(checkout) : null;
-  });
+  const [orderData, setOrderData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!orderData) {
-      navigate(ROUTES.PRODUCTS);
-    }
-  }, [navigate, orderData]);
+    const fetchOrderDetails = async () => {
+      return tracer.startActiveSpan('order.summary.fetch', async (span) => {
+        try {
+          // Get order ID from sessionStorage (set by PaymentPage)
+          const storedOrder = sessionStorage.getItem('orderData');
+          
+          if (!storedOrder) {
+            logger.warn('No order data in session, redirecting to products');
+            navigate(ROUTES.PRODUCTS);
+            span.setStatus({ code: SpanStatusCode.ERROR, message: 'No order data' });
+            span.end();
+            return;
+          }
+          
+          const order = JSON.parse(storedOrder);
+          span.setAttribute('order.id', order.orderId);
+          
+          // If we have a full order from sessionStorage, use it
+          // (Backend doesn't store orders in this demo, so we use sessionStorage)
+          if (order.orderId) {
+            setOrderData(order);
+            span.addEvent('order_loaded_from_session', {
+              'order.id': order.orderId,
+              'order.total': order.total,
+            });
+            logger.info('Order summary displayed', {
+              'order.id': order.orderId,
+              'order.total': order.total,
+            });
+            span.setStatus({ code: SpanStatusCode.OK });
+          } else {
+            throw new Error('Invalid order data');
+          }
+        } catch (error) {
+          span.recordException(error);
+          span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+          logger.error('Failed to load order summary', {
+            'error.message': error.message,
+          });
+          navigate(ROUTES.PRODUCTS);
+        } finally {
+          setLoading(false);
+          span.end();
+        }
+      });
+    };
+    
+    fetchOrderDetails();
+  }, [navigate]);
+
+  if (loading) {
+    return (
+      <div className="order-summary-page">
+        <div className="order-summary-container">
+          <h1>Loading order details...</h1>
+        </div>
+      </div>
+    );
+  }
 
   if (!orderData) {
     return null;
@@ -59,34 +110,32 @@ const OrderSummaryPage = () => {
             </div>
           </div>
 
-          {checkoutData && (
-            <div className="shipping-info">
-              <h2>Shipping Information</h2>
-              <div className="info-grid">
-                <div className="info-item">
-                  <span className="info-label">Name:</span>
-                  <span className="info-value">
-                    {checkoutData.firstName} {checkoutData.lastName}
-                  </span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Email:</span>
-                  <span className="info-value">{checkoutData.email}</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Phone:</span>
-                  <span className="info-value">{checkoutData.phone}</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Address:</span>
-                  <span className="info-value">
-                    {checkoutData.address}, {checkoutData.city},{' '}
-                    {checkoutData.state} {checkoutData.zipCode}
-                  </span>
-                </div>
+          <div className="shipping-info">
+            <h2>Shipping Information</h2>
+            <div className="info-grid">
+              <div className="info-item">
+                <span className="info-label">Name:</span>
+                <span className="info-value">
+                  {orderData.customer?.firstName} {orderData.customer?.lastName}
+                </span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Email:</span>
+                <span className="info-value">{orderData.customer?.email}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Phone:</span>
+                <span className="info-value">{orderData.customer?.phone}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Address:</span>
+                <span className="info-value">
+                  {orderData.shippingAddress?.street}, {orderData.shippingAddress?.city},{' '}
+                  {orderData.shippingAddress?.state} {orderData.shippingAddress?.zipCode}
+                </span>
               </div>
             </div>
-          )}
+          </div>
 
           <div className="order-items">
             <h2>Order Items</h2>

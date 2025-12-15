@@ -225,6 +225,12 @@ registerInstrumentations({
           const url = new URL(request.url);
           span.setAttribute('http.target', url.pathname);
           span.setAttribute('http.host', url.host);
+          
+          // Log trace context being sent (for debugging)
+          const spanContext = span.spanContext();
+          if (url.hostname === 'localhost' && url.port === '3001') {
+            console.log(`📤 Sending request to backend with Trace ID: ${spanContext.traceId}`);
+          }
         }
         
         // Add response details

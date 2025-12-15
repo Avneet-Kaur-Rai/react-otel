@@ -46,7 +46,7 @@ const LoginPage = () => {
     return newErrors;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const newErrors = validate();
 
@@ -57,11 +57,17 @@ const LoginPage = () => {
 
     if (isSignup) {
       signup(formData.email, formData.password, formData.name);
+      navigate(ROUTES.PRODUCTS);
     } else {
-      login(formData.email);
+      // Call backend login API
+      const result = await login(formData.email, formData.password);
+      
+      if (result.success) {
+        navigate(ROUTES.PRODUCTS);
+      } else {
+        setErrors({ email: result.message || 'Login failed' });
+      }
     }
-
-    navigate(ROUTES.PRODUCTS);
   };
 
   return (

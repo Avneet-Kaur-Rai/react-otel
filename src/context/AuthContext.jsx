@@ -27,13 +27,13 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   /**
-   * User Login
+   * User Login - Connected to Backend API
    * 
-   * For Session: Demonstrate authentication tracing
+   * For Session: Demonstrate distributed tracing
    * SECURITY: Never log passwords or sensitive data!
    */
-  const login = (email) => {
-    return tracer.startActiveSpan('auth.login', (span) => {
+  const login = async (email, password) => {
+    return tracer.startActiveSpan('auth.login', async (span) => {
       try {
         // ====================================================================
         // Add span attributes
@@ -41,50 +41,89 @@ export const AuthProvider = ({ children }) => {
         // ====================================================================
         span.setAttribute('auth.method', 'email_password');
         span.setAttribute('user.email', email); // In prod: hash this!
-        span.setAttribute('auth.provider', 'local');
+        span.setAttribute('auth.provider', 'backend_api');
         
         span.addEvent('login_attempt_started', {
           'user.email': email,
         });
         
         // ====================================================================
-        // Simulate login logic
-        // In real app: API call, token validation, etc.
+        // Call Backend API
+        // Fetch instrumentation will automatically add traceparent header!
         // ====================================================================
-        const username = email.split('@')[0];
-        const userData = { email, name: username };
-        
-        // Simulate authentication delay
         const startTime = Date.now();
-        span.addEvent('validating_credentials');
+        span.addEvent('calling_backend_api');
         
-        // In production, this would be an API call
-        // For demo: simulate success
-        setUser(userData);
-        setIsAuthenticated(true);
+        const response = await fetch('http://localhost:3001/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
+        });
         
         const duration = Date.now() - startTime;
         span.setAttribute('auth.duration_ms', duration);
+        span.setAttribute('http.status_code', response.status);
+        
+        if (!response.ok) {
+          span.addEvent('login_failed', {
+            'http.status_code': response.status,
+          });
+          
+          businessMetrics.loginAttempts.add(1, {
+            'auth.method': 'email_password',
+            'auth.result': 'failure'
+          });
+          
+          businessMetrics.loginFailures.add(1, {
+            'auth.method': 'email_password',
+            'user.email': email
+          });
+          
+          span.setStatus({ 
+            code: SpanStatusCode.ERROR, 
+            message: 'Login failed' 
+          });
+          
+          logger.error('Login failed', {
+            'user.email': email,
+            'http.status_code': response.status
+          });
+          
+          span.end();
+          return { success: false, message: 'Invalid credentials' };
+        }
+        
+        const data = await response.json();
+        const userData = data.user;
+        
+        // ====================================================================
+        // Set user state
+        // ====================================================================
+        setUser(userData);
+        setIsAuthenticated(true);
         
         // ====================================================================
         // Set user context for all future spans
         // This enriches ALL subsequent traces with user info
         // ====================================================================
-        setUserContext(email, email);
+        setUserContext(userData.email, userData.id);
         span.addEvent('user_context_set');
         
         // ====================================================================
         // Record business events and metrics
         // ====================================================================
         span.addEvent('login_successful', {
-          'user.name': username,
+          'user.name': userData.name,
+          'user.id': userData.id,
           'session.started': new Date().toISOString(),
         });
         
         // Track login metrics
         businessMetrics.loginAttempts.add(1, {
           'auth.method': 'email_password',
-          'auth.provider': 'local'
+          'auth.result': 'success'
         });
         
         businessMetrics.loginSuccesses.add(1, {
@@ -93,15 +132,16 @@ export const AuthProvider = ({ children }) => {
         });
         
         // Log successful login with trace context
-        logger.info(`User logged in successfully`, {
+        logger.info(`User logged in successfully via backend`, {
           'user.email': email,
-          'user.name': username,
+          'user.name': userData.name,
+          'user.id': userData.id,
           'auth.duration_ms': duration
         });
         
         span.setStatus({ code: SpanStatusCode.OK });
         
-        return true;
+        return { success: true, user: userData };
         
       } catch (error) {
         // ====================================================================
@@ -109,10 +149,10 @@ export const AuthProvider = ({ children }) => {
         // ====================================================================
         span.setStatus({ 
           code: SpanStatusCode.ERROR,
-          message: 'Login failed' 
+          message: error.message 
         });
         span.recordException(error);
-        span.addEvent('login_failed', {
+        span.addEvent('login_error', {
           'error.type': error.name,
           'error.message': error.message,
         });
@@ -120,7 +160,7 @@ export const AuthProvider = ({ children }) => {
         // Track failed login metric
         businessMetrics.loginAttempts.add(1, {
           'auth.method': 'email_password',
-          'auth.provider': 'local'
+          'auth.result': 'error'
         });
         
         businessMetrics.loginFailures.add(1, {
@@ -129,14 +169,14 @@ export const AuthProvider = ({ children }) => {
         });
         
         // Log error with trace context
-        logger.error('Login failed', {
+        logger.error('Login error', {
           'error.type': error.name,
           'error.message': error.message,
           'user.email': email
         });
         
-        console.error('❌ [OTel] Login failed:', error);
-        return false;
+        console.error('❌ [OTel] Login error:', error);
+        return { success: false, message: error.message };
         
       } finally {
         span.end();

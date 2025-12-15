@@ -7,6 +7,8 @@ import { formatCurrency } from '../../utils/formatters';
 import { validateCardNumber, validateCVV } from '../../utils/validators';
 import Input from '../../components/common/Input/Input';
 import Button from '../../components/common/Button/Button';
+import { tracer, businessMetrics, logger } from '../../telemetry/telemetry';
+import { SpanStatusCode } from '@opentelemetry/api';
 import './PaymentPage.css';
 
 const PaymentPage = () => {
@@ -55,27 +57,134 @@ const PaymentPage = () => {
     return newErrors;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const newErrors = validate();
+    
+    return tracer.startActiveSpan('payment.submit', async (span) => {
+      try {
+        span.setAttribute('payment.method', paymentMethod);
+        span.setAttribute('order.items_count', cartItems.length);
+        span.setAttribute('order.total', calculateGrandTotal());
+        span.addEvent('payment_submit_initiated');
+        
+        const newErrors = validate();
 
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
+        if (Object.keys(newErrors).length > 0) {
+          setErrors(newErrors);
+          span.setAttribute('validation.result', 'failed');
+          span.setAttribute('validation.error_count', Object.keys(newErrors).length);
+          span.addEvent('validation_failed');
+          span.setStatus({ code: SpanStatusCode.ERROR, message: 'Validation failed' });
+          span.end();
+          return;
+        }
 
-    // Create order data - Date.now() is safe in event handlers
-    const orderData = {
-      items: cartItems,
-      paymentMethod,
-      total: calculateGrandTotal(),
-      date: new Date().toISOString(),
-      orderId: `ORD-${Date.now()}`,
-    };
-
-    sessionStorage.setItem('orderData', JSON.stringify(orderData));
-    clearCart();
-    navigate(ROUTES.ORDER_SUMMARY);
+        span.addEvent('validation_passed');
+        
+        // Get checkout data from sessionStorage
+        const checkoutDataStr = sessionStorage.getItem('checkoutData');
+        const checkoutData = checkoutDataStr ? JSON.parse(checkoutDataStr) : {};
+        
+        // Prepare order data for backend
+        const orderData = {
+          customer: {
+            firstName: checkoutData.firstName || 'Guest',
+            lastName: checkoutData.lastName || '',
+            email: checkoutData.email || '',
+            phone: checkoutData.phone || ''
+          },
+          shippingAddress: {
+            street: checkoutData.address || '',
+            city: checkoutData.city || '',
+            state: checkoutData.state || '',
+            zipCode: checkoutData.zipCode || '',
+            country: checkoutData.country || 'United States'
+          },
+          items: cartItems.map(item => ({
+            productId: item.id.toString(),
+            quantity: item.quantity,
+            price: item.price
+          })),
+          paymentMethod,
+          subtotal: getCartTotal(),
+          shipping: getCartTotal() > 100 ? 0 : 10,
+          tax: getCartTotal() * 0.1,
+          total: calculateGrandTotal()
+        };
+        
+        span.addEvent('calling_backend_api', {
+          'http.url': 'http://localhost:3001/api/orders',
+          'http.method': 'POST'
+        });
+        
+        logger.info('Submitting order to backend', {
+          'order.total': orderData.total,
+          'order.items_count': orderData.items.length,
+          'payment.method': paymentMethod
+        });
+        
+        // Call backend API
+        const response = await fetch('http://localhost:3001/api/orders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(orderData)
+        });
+        
+        span.setAttribute('http.status_code', response.status);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ message: 'Order submission failed' }));
+          throw new Error(errorData.message || `HTTP ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        span.addEvent('order_created', {
+          'order.id': result.data.orderId,
+          'order.status': result.data.status
+        });
+        
+        logger.info('Order created successfully', {
+          'order.id': result.data.orderId,
+          'order.status': result.data.status,
+          'order.total': result.data.total
+        });
+        
+        // Track successful order
+        businessMetrics.checkoutCompleted.add(1, {
+          'payment.method': paymentMethod,
+          'order.status': 'success'
+        });
+        
+        // Store order data for order summary page
+        sessionStorage.setItem('orderData', JSON.stringify(result.data));
+        
+        clearCart();
+        span.setAttribute('order.result', 'success');
+        span.setAttribute('order.id', result.data.orderId);
+        span.addEvent('navigating_to_order_summary');
+        span.setStatus({ code: SpanStatusCode.OK });
+        span.end();
+        
+        navigate(ROUTES.ORDER_SUMMARY);
+        
+      } catch (error) {
+        span.setAttribute('error', true);
+        span.setAttribute('error.message', error.message);
+        span.recordException(error);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+        span.end();
+        
+        logger.error('Order submission failed', {
+          'error.message': error.message,
+          'payment.method': paymentMethod
+        });
+        
+        alert(`Order submission failed: ${error.message}\n\nPlease try again or contact support.`);
+      }
+    });
   };
 
   const subtotal = getCartTotal();

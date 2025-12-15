@@ -8,8 +8,7 @@
  */
 
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
-import { PRODUCTS } from '../../constants/productData';
+import { useEffect, useState } from 'react';
 import { ROUTES } from '../../constants/routes';
 import { useCart } from '../../context/CartContext';
 import { formatCurrency } from '../../utils/formatters';
@@ -22,13 +21,71 @@ const ProductDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const product = PRODUCTS.find((p) => p.id === parseInt(id));
+  // ============================================================================
+  // Fetch Product from Backend
+  // ============================================================================
+  useEffect(() => {
+    const fetchProduct = async () => {
+      return tracer.startActiveSpan('product.detail.fetch', async (span) => {
+        try {
+          span.setAttribute('product.id', id);
+          span.setAttribute('http.method', 'GET');
+          span.setAttribute('http.url', `http://localhost:3001/api/products/${id}`);
+          
+          span.addEvent('fetching_product_details');
+          
+          const response = await fetch(`http://localhost:3001/api/products/${id}`);
+          
+          span.setAttribute('http.status_code', response.status);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          
+          const data = await response.json();
+          
+          if (data.success && data.product) {
+            setProduct(data.product);
+            span.addEvent('product_fetched', {
+              'product.name': data.product.name,
+              'product.price': data.product.price,
+            });
+            logger.info('Product details fetched from backend', {
+              'product.id': data.product.id,
+              'product.name': data.product.name,
+            });
+          } else {
+            throw new Error('Product not found');
+          }
+          
+          span.setStatus({ code: SpanStatusCode.OK });
+        } catch (error) {
+          span.recordException(error);
+          span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+          logger.error('Failed to fetch product details', {
+            'product.id': id,
+            'error.message': error.message,
+          });
+          setProduct(null);
+        } finally {
+          setLoading(false);
+          span.end();
+        }
+      });
+    };
+    
+    fetchProduct();
+  }, [id]);
 
   // ============================================================================
   // Track Page View (For Session: Explain importance of page analytics)
   // ============================================================================
   useEffect(() => {
+    if (!product) return;
+    
     const span = tracer.startSpan('page.view.productDetail');
     
     span.setAttribute('page.name', 'ProductDetailPage');
@@ -85,15 +142,25 @@ const ProductDetailPage = () => {
     // Cleanup: Track time spent on page
     const startTime = Date.now();
     return () => {
-      const timeSpent = Date.now() - startTime;
+      const timeSpan = Date.now() - startTime;
       const exitSpan = tracer.startSpan('page.exit.productDetail');
-      exitSpan.setAttribute('page.timeSpent_ms', timeSpent);
+      exitSpan.setAttribute('page.timeSpent_ms', timeSpan);
       exitSpan.setAttribute('product.id', id);
       exitSpan.end();
       
-      console.log(`⏱️ [OTel] Time on product page: ${timeSpent}ms`);
+      console.log(`⏱️ [OTel] Time on product page: ${timeSpan}ms`);
     };
   }, [id, product]);
+
+  if (loading) {
+    return (
+      <div className="pdp-page">
+        <div className="pdp-container">
+          <h1>Loading product...</h1>
+        </div>
+      </div>
+    );
+  }
 
   if (!product) {
     return (
